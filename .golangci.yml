@@ -1,0 +1,176 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  concurrency: 0
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - staticcheck
+    - govet
+    - forbidigo
+    - ineffassign
+    - unused
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - decorder
+    - errname
+    - errorlint
+    - exhaustive
+    - forcetypeassert
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - godot
+    - mnd
+    - lll
+    - makezero
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - nolintlint
+    - nosprintfhostport
+    - paralleltest
+    - prealloc
+    - promlinter
+    - reassign
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - unparam
+    - whitespace
+    - wsl_v5
+    - contextcheck
+    - noctx
+    - fatcontext
+    - spancheck
+    - loggercheck
+    - unqueryvet
+    - errchkjson
+    - canonicalheader
+    - usestdlibvars
+    - modernize
+    - exptostd
+    - intrange
+    - copyloopvar
+    - perfsprint
+    - predeclared
+    - recvcheck
+    - protogetter
+    - testifylint
+    - thelper
+
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    forbidigo:
+      forbid:
+        - pattern: '^sqlx\.Named$'
+          msg: 'Do not use sqlx named parameters. Use positional PostgreSQL placeholders: $1, $2, ...'
+
+        - pattern: '\.NamedExec$'
+          msg: 'Do not use NamedExec. Use ExecContext with $1, $2, ...'
+
+        - pattern: '\.NamedQuery$'
+          msg: 'Do not use NamedQuery. Use QueryxContext/GetContext/SelectContext with $1, $2, ...'
+
+        - pattern: '^sqlx\.NamedStmt$'
+          msg: 'Do not use NamedStmt. Use prepared statements with positional placeholders.'
+
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+      case-max-lines: 0
+      cuddle-max-statements: 1
+      default: ~ # Can be `all`, `none`, `default` or empty
+      enable:
+        - append
+        - assign
+        - branch
+        - decl
+        - defer
+        - err
+        - expr
+        - for
+        - go
+        - if
+        - inc-dec
+        - label
+        - range
+        - return
+        - select
+        - send
+        - switch
+        - type-switch
+        - leading-whitespace
+        - trailing-whitespace
+      disable:
+        - after-block
+        - after-decl
+        - after-defer
+        - after-expr
+        - after-go
+        - assign-exclusive
+        - assign-expr
+        - cuddle-group
+
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+
+    nakedret:
+      max-func-lines: 4
+
+    nlreturn:
+      block-size: 4
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    wsl:
+      allow-cuddle-declarations: true
+      force-err-cuddling: true
+      allow-assign-and-anything: true
+
+    gocognit:
+      min-complexity: 90
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - exhaustruct
+
+      - path: main.go
+        linters:
+          - exhaustruct
+
+      - path: requests.go
+        linters:
+          - exhaustruct
+
+formatters:
+  enable:
+    - goimports
