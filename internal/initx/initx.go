@@ -17,11 +17,15 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const tasksBufferSize = 100
+const (
+	tasksBufferSize = 100
+	shutdownTimeout = 5 * time.Second
+)
 
 type App struct {
-	http *fiber.App
-	host string
+	http   *fiber.App
+	host   string
+	cancel context.CancelFunc
 }
 
 func NewApp(cfg *config.Config) (*App, error) {
@@ -52,8 +56,10 @@ func NewApp(cfg *config.Config) (*App, error) {
 
 	queue := worker.NewChannelQueue(tasksBufferSize)
 
+	workerCtx, cancel := context.WithCancel(context.Background())
+
 	calcWorker := worker.New(pgRepo, cacheRepo, queue)
-	go calcWorker.Run(context.Background())
+	go calcWorker.Run(workerCtx)
 
 	svc := service.NewService(pgRepo, cacheRepo, queue)
 	handlers := drivinghttp.NewHandlers(svc)
@@ -61,12 +67,22 @@ func NewApp(cfg *config.Config) (*App, error) {
 	app := fiber.New(fiber.Config{ErrorHandler: drivinghttp.ErrorHandler})
 	drivinghttp.MapRoutes(app, handlers, drivinghttp.NewAuthMiddleware(cfg.Auth.JWTSecret))
 
-	return &App{http: app, host: cfg.Server.Host}, nil
+	return &App{http: app, host: cfg.Server.Host, cancel: cancel}, nil
 }
 
 func (a *App) Run() error {
 	if err := a.http.Listen(a.host); err != nil {
 		return fmt.Errorf("initx.Run: %w", err)
+	}
+
+	return nil
+}
+
+func (a *App) Shutdown() error {
+	a.cancel()
+
+	if err := a.http.ShutdownWithTimeout(shutdownTimeout); err != nil {
+		return fmt.Errorf("initx.Shutdown: %w", err)
 	}
 
 	return nil
