@@ -15,7 +15,7 @@ import (
 type service struct {
 	pgRepo    ports.PGRepository
 	cacheRepo ports.CacheRepository
-	tasks     chan int64 // очередь задач воркеру: id расчётов
+	tasks     chan domain.CalcTask // очередь задач воркеру: id расчётов + снапшот профиля
 }
 
 func (s *service) CreateCalculation(ctx context.Context, profile domain.MortgageProfile) (id int64, err error) {
@@ -40,7 +40,7 @@ func (s *service) CreateCalculation(ctx context.Context, profile domain.Mortgage
 	}
 
 	// Задачу воркеру на расчёт графика
-	s.tasks <- id
+	s.tasks <- domain.CalcTask{CalculationID: id, Profile: profile}
 
 	if err = s.cacheRepo.Set(ctx, key, id); err != nil {
 		return 0, fmt.Errorf("service.CreateCalculation.CacheSet: %w", err)
@@ -67,7 +67,7 @@ func (s *service) GetCalculation(ctx context.Context, id int64) (calc domain.Mor
 	return calc, nil
 }
 
-func NewService(pgRepo ports.PGRepository, cacheRepo ports.CacheRepository, tasks chan int64) ports.Service {
+func NewService(pgRepo ports.PGRepository, cacheRepo ports.CacheRepository, tasks chan domain.CalcTask) ports.Service {
 	return &service{
 		pgRepo:    pgRepo,
 		cacheRepo: cacheRepo,

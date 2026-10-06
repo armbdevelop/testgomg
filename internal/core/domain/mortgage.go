@@ -45,6 +45,11 @@ type MortgageCalculation struct {
 	Status                  string          `json:"status"`
 }
 
+type CalcTask struct {
+	CalculationID int64
+	Profile       MortgageProfile
+}
+
 func (p PropertyType) Valid() bool {
 	switch p {
 	case ApartmentInNewBuilding,
