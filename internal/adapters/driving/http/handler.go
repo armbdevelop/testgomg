@@ -1,12 +1,16 @@
 package http
 
 import (
+	"context"
 	"strconv"
+	"time"
 
 	"github.com/armbdevelop/testgomg/internal/core/domain"
 	"github.com/armbdevelop/testgomg/internal/core/ports"
 	"github.com/gofiber/fiber/v2"
 )
+
+const requestTimeout = 10 * time.Second
 
 type Handlers interface {
 	CreateCalculation() fiber.Handler
@@ -33,12 +37,15 @@ func (h *handlers) CreateCalculation() fiber.Handler {
 
 		req.UserID = userID
 
-		id, err := h.svc.CreateCalculation(c.UserContext(), req)
+		ctx, cancel := context.WithTimeout(c.UserContext(), requestTimeout)
+		defer cancel()
+
+		id, err := h.svc.CreateCalculation(ctx, req)
 		if err != nil {
 			return err
 		}
 
-		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": id})
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"id": strconv.FormatInt(id, 10)})
 	}
 }
 
@@ -49,11 +56,19 @@ func (h *handlers) GetCalculation() fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{errKey: "id должен быть числом"})
 		}
 
-		calc, err := h.svc.GetCalculation(c.UserContext(), id)
+		userID, err := userIDFrom(c)
 		if err != nil {
-			return err // уйдёт в глобальный ErrorHandler
+			return err
 		}
 
-		return c.JSON(calc)
+		ctx, cancel := context.WithTimeout(c.UserContext(), requestTimeout)
+		defer cancel()
+
+		calc, err := h.svc.GetCalculation(ctx, id, userID)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(newCalculationResponse(calc))
 	}
 }

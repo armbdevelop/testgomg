@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,34 +13,40 @@ import (
 )
 
 type cacheRepo struct {
-	client *redis.Client
-	ttl    time.Duration
+	client    *redis.Client
+	resultTTL time.Duration
 }
 
-func (c *cacheRepo) Get(ctx context.Context, key string) (id int64, err error) {
-	id, err = c.client.Get(ctx, key).Int64()
+func NewCacheRepository(client *redis.Client, resultTTL time.Duration) ports.CacheRepository {
+	return &cacheRepo{client: client, resultTTL: resultTTL}
+}
+
+func (c *cacheRepo) GetCalculation(ctx context.Context, key string) (calc domain.MortgageCalculation, err error) {
+	data, err := c.client.Get(ctx, key).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, domain.ErrNotFound
+			return calc, domain.ErrNotFound
 		}
 
-		return 0, fmt.Errorf("cacheRepo.Get: %w", err)
+		return calc, fmt.Errorf("cacheRepo.GetCalculation: %w", err)
 	}
 
-	return id, nil
+	if err = json.Unmarshal(data, &calc); err != nil {
+		return calc, fmt.Errorf("cacheRepo.GetCalculation.Unmarshal: %w", err)
+	}
+
+	return calc, nil
 }
 
-func (c *cacheRepo) Set(ctx context.Context, key string, id int64) (err error) {
-	if err = c.client.Set(ctx, key, id, c.ttl).Err(); err != nil {
-		return fmt.Errorf("cacheRepo.Set: %w", err)
+func (c *cacheRepo) SetCalculation(ctx context.Context, key string, calc domain.MortgageCalculation) (err error) {
+	data, err := json.Marshal(calc)
+	if err != nil {
+		return fmt.Errorf("cacheRepo.SetCalculation.Marshal: %w", err)
+	}
+
+	if err = c.client.Set(ctx, key, data, c.resultTTL).Err(); err != nil {
+		return fmt.Errorf("cacheRepo.SetCalculation: %w", err)
 	}
 
 	return nil
-}
-
-func NewCacheRepository(client *redis.Client, ttl time.Duration) ports.CacheRepository {
-	return &cacheRepo{
-		client: client,
-		ttl:    ttl,
-	}
 }

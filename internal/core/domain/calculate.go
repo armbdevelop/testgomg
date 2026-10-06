@@ -15,18 +15,20 @@ const (
 )
 
 func Calculate(profile MortgageProfile) (calc MortgageCalculation) {
+	calc.UserID = profile.UserID
+
 	motherCapital := 0.0
 	if profile.MatCapitalIncluded && profile.MatCapitalAmount != nil {
 		motherCapital = *profile.MatCapitalAmount
 	}
 
-	loan := profile.PropertyPrice - profile.DownPaymentAmount - motherCapital // Сумма кредита
-	n := profile.MortgageTermYears * monthsInYear                             // месяцев
-	i := profile.InterestRate / monthsInYear / kopecksInRuble                 // месячная ставка
+	loan := profile.PropertyPrice - profile.DownPaymentAmount - motherCapital
+	n := profile.MortgageTermYears * monthsInYear
+	i := profile.InterestRate / monthsInYear / kopecksInRuble
 
-	payment, overpayment := annuity(loan, i, n) // аннуитетный платеж и переплата
+	payment, overpayment := annuity(loan, i, n)
 
-	total := payment * float64(n) // общая сумма выплат
+	total := payment * float64(n)
 
 	taxDeduction := min(profile.PropertyPrice, deductionPropertyCap)*deductionRate +
 		min(overpayment, deductionInterestCap)*deductionRate
@@ -34,7 +36,8 @@ func Calculate(profile MortgageProfile) (calc MortgageCalculation) {
 
 	calc.PaymentSchedule = make(PaymentSchedule)
 
-	start := time.Now().AddDate(0, 1, 0) // первый платёж в следующем месяце
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
 
 	for k := range n {
 		if remainder <= 0 {
@@ -46,7 +49,7 @@ func Calculate(profile MortgageProfile) (calc MortgageCalculation) {
 		remainder -= body
 		date := start.AddDate(0, k, 0)
 
-		year := date.Format("2006") // "2026"
+		year := date.Format("2006")
 		month := date.Format("01")
 
 		if calc.PaymentSchedule[year] == nil {
@@ -61,10 +64,8 @@ func Calculate(profile MortgageProfile) (calc MortgageCalculation) {
 		}
 	}
 
-	// Переплата в сценарии без маткапитала (кредит был бы на него больше).
 	_, overpaymentNoMC := annuity(loan+motherCapital, i, n)
 
-	// Экономия от маткапитала это разница переплат двух сценариев.
 	calc.SavingsDueMotherCapital = round2(overpaymentNoMC - overpayment)
 	calc.MonthlyPayment = round2(payment)
 	calc.TotalPayment = round2(total)
@@ -77,7 +78,6 @@ func Calculate(profile MortgageProfile) (calc MortgageCalculation) {
 
 func annuity(loan, monthlyRate float64, months int) (payment, overpayment float64) {
 	pow := math.Pow(1+monthlyRate, float64(months))
-	// Аннуитет платёж одинаковый каждый месяц, из формулы 4 в ТЗ.
 	payment = loan * monthlyRate * pow / (pow - 1)
 	overpayment = payment*float64(months) - loan
 

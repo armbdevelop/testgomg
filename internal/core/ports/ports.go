@@ -7,20 +7,26 @@ import (
 )
 
 type PGRepository interface {
-	// CreateCalculation сохраняет профиль и расчёт в одной транзакции, возвращает id расчёта.
-	CreateCalculation(ctx context.Context, profile domain.MortgageProfile,
-		calc domain.MortgageCalculation) (id int64, err error)
-	GetCalculation(ctx context.Context, id int64) (calc domain.MortgageCalculation, err error)
-	// UpdateCalculation дописывает результат воркера (суммы и график) в существующий расчёт.
+	// GetOrCreateCalculation атомарно находит или создаёт расчёт с теми же параметрами и владельцем.
+	GetOrCreateCalculation(
+		ctx context.Context,
+		profile domain.MortgageProfile,
+	) (calc domain.MortgageCalculation, err error)
+	GetCalculation(ctx context.Context, id int64, userID string) (calc domain.MortgageCalculation, err error)
 	UpdateCalculation(ctx context.Context, calc domain.MortgageCalculation) (err error)
 }
 
 type CacheRepository interface {
-	Get(ctx context.Context, key string) (id int64, err error)
-	Set(ctx context.Context, key string, id int64) (err error)
+	GetCalculation(ctx context.Context, key string) (calc domain.MortgageCalculation, err error)
+	SetCalculation(ctx context.Context, key string, calc domain.MortgageCalculation) (err error)
+}
+
+type TaskQueue interface {
+	Enqueue(ctx context.Context, task domain.CalcTask) (err error)
+	Dequeue(ctx context.Context) (task domain.CalcTask, err error)
 }
 
 type Service interface {
 	CreateCalculation(ctx context.Context, profile domain.MortgageProfile) (id int64, err error)
-	GetCalculation(ctx context.Context, id int64) (calc domain.MortgageCalculation, err error)
+	GetCalculation(ctx context.Context, id int64, userID string) (calc domain.MortgageCalculation, err error)
 }

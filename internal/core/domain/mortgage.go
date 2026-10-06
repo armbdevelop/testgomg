@@ -4,6 +4,9 @@ type PropertyType string
 type PaymentSchedule map[string]map[string]MortgagePayment
 
 const (
+	StatusPending = "pending"
+	StatusDone    = "done"
+
 	ApartmentInNewBuilding       PropertyType = "apartment_in_new_building"
 	ApartmentInSecondaryBuilding PropertyType = "apartment_in_secondary_building"
 	House                        PropertyType = "house"
@@ -15,13 +18,13 @@ const (
 type MortgageProfile struct {
 	ID                 int64        `json:"id"`
 	UserID             string       `json:"userId"`
-	PropertyPrice      float64      `json:"propertyPrice" validate:"required,gt=0"`
-	PropertyType       PropertyType `json:"propertyType" validate:"required"`
-	DownPaymentAmount  float64      `json:"downPaymentAmount" validate:"gte=0"`
+	PropertyPrice      float64      `json:"propertyPrice"`
+	PropertyType       PropertyType `json:"propertyType"`
+	DownPaymentAmount  float64      `json:"downPaymentAmount"`
 	MatCapitalAmount   *float64     `json:"matCapitalAmount"`
 	MatCapitalIncluded bool         `json:"matCapitalIncluded"`
-	MortgageTermYears  int          `json:"mortgageTermYears" validate:"required,gt=0"`
-	InterestRate       float64      `json:"interestRate" validate:"required,gt=0"` // годовая, в процентах (8 = 8%)
+	MortgageTermYears  int          `json:"mortgageTermYears"`
+	InterestRate       float64      `json:"interestRate"` // годовая ставка в процентах
 }
 
 type MortgagePayment struct {

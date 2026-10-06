@@ -1,0 +1,22 @@
+{
+  "Server": {
+    "Host": ":8080"
+  },
+  "Postgres": {
+    "Host": "localhost",
+    "Port": "5432",
+    "Username": "postgres",
+    "Password": "postgres",
+    "Database": "mortgage",
+    "SSLMode": "disable"
+  },
+  "Redis": {
+    "Addr": "localhost:6379",
+    "Password": "",
+    "DB": 0,
+    "CacheTTL": 86400
+  },
+  "Auth": {
+    "JWTSecret": "change"
+  }
+}

@@ -21,20 +21,52 @@ func NewPGRepository(db *sqlx.DB) ports.PGRepository {
 	return &pgRepo{db: db}
 }
 
-func (p *pgRepo) CreateCalculation(ctx context.Context, profile domain.MortgageProfile,
-	_ domain.MortgageCalculation) (id int64, err error) {
-	tx, err := p.db.BeginTxx(ctx, nil)
+func (p *pgRepo) GetOrCreateCalculation(
+	ctx context.Context,
+	profile domain.MortgageProfile,
+) (calc domain.MortgageCalculation, err error) {
+	paramsHash, err := domain.CacheKey(profile)
 	if err != nil {
-		return 0, fmt.Errorf("pgRepo.CreateCalculation.Begin: %w", err)
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.Hash: %w", err)
+	}
+
+	tx, err := p.db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.Begin: %w", err)
 	}
 	defer func() {
 		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-			log.Printf("pgRepo.CreateCalculation.Rollback: %v", rbErr)
+			log.Printf("pgRepo.GetOrCreateCalculation.Rollback: %v", rbErr)
 		}
 	}()
 
+	// Блокировка живёт до конца транзакции, включая поиск существующей записи.
+	if _, err = tx.ExecContext(ctx, queryLockMortgageCalculation, profile.UserID+":"+paramsHash); err != nil {
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.Lock(userID: %s): %w", profile.UserID, err)
+	}
+
+	var row mortgageCalculationRow
+
+	err = tx.GetContext(ctx, &row, querySelectCalculationByParams,
+		profile.UserID, profile.PropertyPrice, profile.PropertyType, profile.DownPaymentAmount,
+		profile.MatCapitalAmount, profile.MatCapitalIncluded, profile.MortgageTermYears, profile.InterestRate)
+	if err == nil {
+		calc, err = row.toDomain()
+		if err != nil {
+			return calc, err
+		}
+
+		if err = tx.Commit(); err != nil {
+			return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.Commit: %w", err)
+		}
+
+		return calc, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.Select(userID: %s): %w", profile.UserID, err)
+	}
+
 	if _, err = tx.ExecContext(ctx, queryUpsertUser, profile.UserID); err != nil {
-		return 0, fmt.Errorf("pgRepo.CreateCalculation.UpsertUser: %w", err)
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.UpsertUser: %w", err)
 	}
 
 	var profileID int64
@@ -47,18 +79,22 @@ func (p *pgRepo) CreateCalculation(ctx context.Context, profile domain.MortgageP
 		profile.MatCapitalIncluded,
 		profile.MortgageTermYears,
 		profile.InterestRate); err != nil {
-		return 0, fmt.Errorf("pgRepo.CreateCalculation.InsertProfile: %w", err)
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.InsertProfile: %w", err)
 	}
 
-	if err = tx.GetContext(ctx, &id, queryInsertMortgageCalculation, profile.UserID, profileID); err != nil {
-		return 0, fmt.Errorf("pgRepo.CreateCalculation.InsertCalculation: %w", err)
+	if err = tx.GetContext(ctx, &calc.ID, queryInsertMortgageCalculation, profile.UserID, profileID); err != nil {
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.InsertCalculation: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return 0, fmt.Errorf("pgRepo.CreateCalculation.Commit: %w", err)
+		return calc, fmt.Errorf("pgRepo.GetOrCreateCalculation.Commit: %w", err)
 	}
 
-	return id, nil
+	calc.UserID = profile.UserID
+	calc.MortgageProfileID = profileID
+	calc.Status = domain.StatusPending
+
+	return calc, nil
 }
 
 type mortgageCalculationRow struct {
@@ -74,10 +110,11 @@ type mortgageCalculationRow struct {
 	PaymentSchedule         []byte          `db:"payment_schedule"`
 }
 
-func (p *pgRepo) GetCalculation(ctx context.Context, id int64) (calc domain.MortgageCalculation, err error) {
+func (p *pgRepo) GetCalculation(ctx context.Context, id int64,
+	userID string) (calc domain.MortgageCalculation, err error) {
 	var row mortgageCalculationRow
 
-	if err := p.db.GetContext(ctx, &row, querySelectMortgageCalculation, id); err != nil {
+	if err := p.db.GetContext(ctx, &row, querySelectMortgageCalculation, id, userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return calc, domain.ErrNotFound
 		}
@@ -85,6 +122,10 @@ func (p *pgRepo) GetCalculation(ctx context.Context, id int64) (calc domain.Mort
 		return domain.MortgageCalculation{}, fmt.Errorf("pgRepo.GetCalculation.Select: %w", err)
 	}
 
+	return row.toDomain()
+}
+
+func (row mortgageCalculationRow) toDomain() (calc domain.MortgageCalculation, err error) {
 	calc = domain.MortgageCalculation{
 		ID:                      row.ID,
 		UserID:                  row.UserID,
@@ -95,12 +136,17 @@ func (p *pgRepo) GetCalculation(ctx context.Context, id int64) (calc domain.Mort
 		PossibleTaxDeduction:    row.PossibleTaxDeduction.Float64,
 		SavingsDueMotherCapital: row.SavingsDueMotherCapital.Float64,
 		RecommendedIncome:       row.RecommendedIncome.Float64,
+		Status:                  domain.StatusPending,
 	}
 
 	if len(row.PaymentSchedule) > 0 {
 		if err = json.Unmarshal(row.PaymentSchedule, &calc.PaymentSchedule); err != nil {
 			return calc, fmt.Errorf("pgRepo.GetCalculation.Schedule: %w", err)
 		}
+	}
+
+	if calc.PaymentSchedule != nil {
+		calc.Status = domain.StatusDone
 	}
 
 	return calc, nil

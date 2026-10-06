@@ -1,6 +1,10 @@
 package postgres
 
 const (
+	queryLockMortgageCalculation = `
+		select pg_advisory_xact_lock(hashtextextended($1, 0));
+	`
+
 	queryUpsertUser = `
 	insert into users (tg_id) values ($1) on conflict (tg_id) do nothing;
 	`
@@ -38,6 +42,22 @@ const (
      where id=$1;     
 	`
 
+	querySelectCalculationByParams = `
+		select c.id, c.user_id, c.mortgage_profile_id, c.monthly_payment,
+			c.total_payment, c.total_overpayment_amount, c.possible_tax_deduction,
+			c.savings_due_mother_capital, c.recommended_income, c.payment_schedule
+		from mortgage_calculation c
+		join mortgage_profile p on p.id = c.mortgage_profile_id
+		where c.user_id = $1 and p.user_id = $1
+			and p.property_price = $2 and p.property_type = $3
+			and p.down_payment_amount = $4
+			and p.mat_capital_amount is not distinct from $5
+			and p.mat_capital_included = $6
+			and p.mortgage_term_years = $7 and p.interest_rate = $8
+		order by c.id
+		limit 1;
+	`
+
 	querySelectMortgageCalculation = `
 	select 
 	    id, 
@@ -51,6 +71,6 @@ const (
    		recommended_income, 
    		payment_schedule                               
     from mortgage_calculation 
-    where id=$1;         
+    where id=$1 and user_id=$2;
 	`
 )

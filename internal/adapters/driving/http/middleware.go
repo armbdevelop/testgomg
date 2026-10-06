@@ -10,8 +10,6 @@ import (
 
 const userIDKey = "userID"
 
-// NewAuthMiddleware проверяет JWT из заголовка Authorization: Bearer <token>
-// и кладёт id юзера (claim sub) в контекст запроса.
 func NewAuthMiddleware(secret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		header := c.Get(fiber.HeaderAuthorization)
