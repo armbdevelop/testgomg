@@ -42,6 +42,7 @@ type MortgageCalculation struct {
 	SavingsDueMotherCapital float64         `json:"savingsDueMotherCapital"`
 	RecommendedIncome       float64         `json:"recommendedIncome"`
 	PaymentSchedule         PaymentSchedule `json:"mortgagePaymentSchedule"`
+	Status                  string          `json:"status"`
 }
 
 func (p PropertyType) Valid() bool {
